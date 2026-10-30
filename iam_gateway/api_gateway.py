@@ -1,7 +1,7 @@
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
-from typing import Dict, Any
-from gateway import CredentialIssuer, ToolExecutionGateway
+from typing import Dict, Any, Optional
+from gateway import CredentialIssuer, ToolExecutionGateway, TaskCredential
 import time
 
 app = FastAPI(title="Task-Scoped Credential Gateway - Max Edition")
@@ -9,6 +9,7 @@ issuer = CredentialIssuer("task_profiles.json")
 gateway = ToolExecutionGateway(issuer)
 
 active_credentials = {}
+# Broad user entitlements mimicking Setup B from the paper
 user_entitlements = ["document:read", "email:send", "file_store:read", "file_store:delete", "*:*"]
 
 class TaskRequest(BaseModel):
@@ -44,13 +45,15 @@ def issue_token(req: TaskRequest):
 
 @app.post("/delegate_token")
 def delegate_token(req: DelegateRequest):
+    # Fulfills Multi-Agent Delegation Chains (Future Scope)
     parent = active_credentials.get(req.parent_token_id)
     if not parent or not parent.is_valid():
-        raise HTTPException(status_code=401, detail="Parent credential is invalid or expired")
+        raise HTTPException(status_code=401, detail="Invalid Parent Token")
     try:
-        child = issuer.issue_credential(req.sub_agent_id, parent.user_id, req.task_id, req.profile_name)
-        active_credentials[child.token_id] = child
-        return {"status": "SUCCESS", "token_id": child.token_id, "expires_at": child.expires_at}
+        # Issue a fresh, short-lived token for the sub-agent
+        child_cred = issuer.issue_credential(req.sub_agent_id, parent.user_id, req.task_id, req.profile_name)
+        active_credentials[child_cred.token_id] = child_cred
+        return {"status": "SUCCESS", "delegated_token_id": child_cred.token_id}
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -58,11 +61,12 @@ def delegate_token(req: DelegateRequest):
 def execute_tool(req: ToolCallRequest):
     cred = active_credentials.get(req.token_id)
     if not cred:
-        raise HTTPException(status_code=401, detail="Unknown credential")
-    request = req.model_dump(exclude={"token_id"})
-    result = gateway.execute_tool_call(cred, request, user_entitlements)
+        raise HTTPException(status_code=401, detail="Credential not found or revoked")
+    
+    request_data = req.dict(exclude={"token_id"})
+    result = gateway.execute_tool_call(cred, request_data, user_entitlements)
     return result
 
-@app.get("/audit")
-def get_audit_log():
-    return {"events": gateway.audit_log}
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="127.0.0.1", port=8000)

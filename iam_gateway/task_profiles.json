@@ -1,0 +1,32 @@
+{
+  "summarize_doc": {
+    "allowed_operations": [
+      { "resource": "document", "operation": "read" }
+    ],
+    "argument_constraints": {},
+    "requires_approval": [],
+    "ttl_seconds": 300,
+    "max_violations": 3
+  },
+  "email_report": {
+    "allowed_operations": [
+      { "resource": "document", "operation": "read" },
+      { "resource": "email", "operation": "send" }
+    ],
+    "argument_constraints": {
+      "recipient": ["manager@company.com", "team@company.com"]
+    },
+    "requires_approval": ["email:send"],
+    "ttl_seconds": 300,
+    "max_violations": 3
+  },
+  "wildcard_admin_t8": {
+    "allowed_operations": [
+      { "resource": "*", "operation": "*" }
+    ],
+    "argument_constraints": {},
+    "requires_approval": [],
+    "ttl_seconds": 3600,
+    "max_violations": 10
+  }
+}
